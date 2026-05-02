@@ -290,8 +290,8 @@ function App(){
           <Card label="PROFIT FACTOR" val={pf} color="#60a5fa"/>
           <Card label="BEST DAY" val={fmt(best)?.text??"—"} color={G}/>
           <Card label="AVG WIN" val={fmt(avgW)?.text??"—"} color={G} sub={`${wins.length} days`}/>
-          <Card label="AVG LOSS" val={fmt(avgL)?.text??"—"} color={R} sub={`${losses.length} days`}/>
-          <Card label="WORST DAY" val={fmt(worst)?.text??"—"} color={R}/>
+          <Card label="AVG LOSS" val={losses.length>0?fmt(avgL)?.text??"—":"—"} color={R} sub={`${losses.length} days`}/>
+          <Card label="WORST DAY" val={fmt(worst)?.text??"—"} color={worst<0?R:"#c0d0e0"}/>
         </div>
 
         {barData.length>0&&(
