@@ -399,7 +399,7 @@ function App(){
             <div style={{fontSize:9,color:"#5a7090",letterSpacing:1}}>DAILY P&L (USD)</div>
             <input autoFocus value={inp} onChange={e=>setInp(e.target.value)}
               onKeyDown={e=>{if(e.key==="Enter")confirmEdit();if(e.key==="Escape"){setEdit(null);setInp("");}}}
-              placeholder="715 or -350" inputMode="decimal"
+              placeholder="715 or -350" inputMode="text"
               style={{background:"#04070e",border:"1px solid #2a3d50",borderRadius:6,padding:"12px 14px",color:"#ddeeff",fontSize:20,fontWeight:700,fontFamily:"'Courier New',monospace",outline:"none",textAlign:"center",width:"100%"}}
             />
             {inp.trim()&&!isNaN(parseFloat(inp))&&(()=>{
