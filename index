@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="theme-color" content="#04070e"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="P&L Journal"/>
+  <title>P&L Journal</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    body{background:#04070e;font-family:'Courier New',monospace;color:#c0d0e0;overscroll-behavior:none;min-height:100vh;}
+    ::-webkit-scrollbar{display:none;}
+    button{font-family:'Courier New',monospace;cursor:pointer;border:none;background:none;}
+    input{font-family:'Courier New',monospace;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SK = "nq-pl-v4";
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const WD = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+
+function fmt(value, compact=true) {
+  if (value===null||value===undefined||value==="") return null;
+  const num=parseFloat(value);
+  if (isNaN(num)) return null;
+  const abs=Math.abs(num);
+  let s;
+  if (compact&&abs>=1000) {
+    const k=abs/1000;
+    s=(k%1===0?k.toFixed(0):k.toFixed(1))+"K";
+  } else { s=abs.toFixed(2); }
+  return {value:num, text:(num>=0?"+":"-")+s};
+}
+
+const dim=(y,m)=>new Date(y,m+1,0).getDate();
+const fd=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1;};
+function wkn(date){
+  const d=new Date(date);d.setHours(0,0,0,0);
+  d.setDate(d.getDate()+4-(d.getDay()||7));
+  return Math.ceil((((d-new Date(d.getFullYear(),0,1))/86400000)+1)/7);
+}
+
+const G="#4ade80",R="#f87171";
+const glow=v=>v>=0?"0 0 10px rgba(74,222,128,0.5)":"0 0 10px rgba(248,113,113,0.5)";
+function cellBg(pl){
+  if(pl===null)return null;
+  const i=Math.min(Math.abs(pl)/35000,1);
+  return pl>0?`rgba(20,${Math.floor(60+i*120)},45,${0.25+i*0.55})`:`rgba(${Math.floor(70+i*120)},15,25,${0.25+i*0.55})`;
+}
+
+function App(){
+  const now=new Date();
+  const [data,setData]=useState({});
+  const [view,setView]=useState("calendar");
+  const [yr,setYr]=useState(now.getFullYear());
+  const [mo,setMo]=useState(now.getMonth());
+  const [calMode,setCalMode]=useState("month");
+  const [dashRange,setDashRange]=useState("month");
+  const [edit,setEdit]=useState(null);
+  const [inp,setInp]=useState("");
+
+  useEffect(()=>{
+    try{const s=localStorage.getItem(SK);if(s)setData(JSON.parse(s));}catch{}
+  },[]);
+
+  const persist=d=>{setData(d);try{localStorage.setItem(SK,JSON.stringify(d));}catch{}};
+  const key=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const get=(y,m,d)=>data[key(y,m,d)]??null;
+  const set=(y,m,d,val)=>{
+    const nd={...data};
+    if(val===null||val==="")delete nd[key(y,m,d)];
+    else nd[key(y,m,d)]=parseFloat(val);
+    persist(nd);
+  };
+
+  const openEdit=(y,m,d)=>{const v=get(y,m,d);setInp(v!==null?String(v):"");setEdit({y,m,d});};
+  const confirmEdit=(clear=false)=>{
+    if(edit){
+      if(clear)set(edit.y,edit.m,edit.d,null);
+      else{const v=inp.trim();set(edit.y,edit.m,edit.d,v===""?null:v);}
+    }
+    setEdit(null);setInp("");
+  };
+
+  const isToday=(y,m,d)=>y===now.getFullYear()&&m===now.getMonth()&&d===now.getDate();
+  const isFuture=(y,m,d)=>new Date(y,m,d)>now;
+  const mTotal=(y,m)=>{let t=0;for(let d=1;d<=dim(y,m);d++){const v=get(y,m,d);if(v!==null)t+=v;}return t;};
+  const prevMo=()=>mo===0?(setMo(11),setYr(y=>y-1)):setMo(m=>m-1);
+  const nextMo=()=>mo===11?(setMo(0),setYr(y=>y+1)):setMo(m=>m+1);
+
+  // ── MONTH VIEW ──
+  function MonthView(){
+    const totalDays=dim(yr,mo);
+    const fday=fd(yr,mo);
+    const cells=[...Array(fday).fill(null),...Array.from({length:totalDays},(_,i)=>i+1)];
+    const rows=[];
+    for(let r=0;r<Math.ceil(cells.length/7);r++) rows.push(cells.slice(r*7,r*7+7));
+    const mt=mTotal(yr,mo);
+    const fMo=fmt(mt);
+
+    return (
+      <div>
+        <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",background:"#06090f",borderBottom:"1px solid #161f2e"}}>
+          <div style={{padding:"9px 0",fontSize:8,color:"#1a2535",textAlign:"center"}}>WK</div>
+          {WD.map(w=>(
+            <div key={w} style={{textAlign:"center",padding:"9px 0",fontSize:9,letterSpacing:1.5,fontWeight:700,color:w==="SAT"||w==="SUN"?"#1c2a3a":"#304a60"}}>{w}</div>
+          ))}
+        </div>
+
+        {rows.map((row,ri)=>{
+          let wt=0,hasW=false;
+          row.forEach(d=>{if(!d)return;const v=get(yr,mo,d);if(v!==null){wt+=v;hasW=true;}});
+          const fW=fmt(wt);
+          const padded=row.length<7?[...row,...Array(7-row.length).fill(null)]:row;
+          return(
+            <div key={ri} style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",borderBottom:"1px solid #0c1118"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",background:"#06090f",borderRight:"1px solid #161f2e",padding:"2px"}}>
+                {hasW&&fW&&<span style={{fontSize:9,fontWeight:700,textAlign:"center",lineHeight:1.3,color:wt>=0?G:R,textShadow:glow(wt),wordBreak:"break-all"}}>{fW.text}</span>}
+              </div>
+              {padded.map((day,ci)=>{
+                if(!day)return<div key={ci} style={{aspectRatio:"1",background:"#06090f",borderRight:"1px solid #0c1118"}}/>;
+                const pl=get(yr,mo,day);
+                const fpl=fmt(pl);
+                const tod=isToday(yr,mo,day);
+                const fut=isFuture(yr,mo,day);
+                const wknd=ci>=5;
+                const bg=cellBg(pl)||(wknd?"#080c14":"#0e1625");
+                return(
+                  <div key={day} onClick={()=>!fut&&openEdit(yr,mo,day)} style={{
+                    aspectRatio:"1",position:"relative",background:bg,
+                    borderRight:"1px solid #0c1118",cursor:fut?"default":"pointer",
+                    boxShadow:tod?"inset 0 0 0 2px #3b82f6":"none",
+                    transition:"filter 0.1s",display:"flex",flexDirection:"column",
+                    alignItems:"center",justifyContent:"space-between",
+                    padding:"8px 2px 9px"
+                  }}>
+                    <span style={{fontSize:12,fontWeight:tod?700:400,color:tod?"#60a5fa":wknd?"#1c2a3a":"#304a60",lineHeight:1}}>{day}</span>
+                    {fpl?(
+                      <span style={{fontSize:Math.abs(pl)>=10000?10:12,fontWeight:700,color:pl>=0?G:R,textShadow:glow(pl),lineHeight:1,textAlign:"center"}}>{fpl.text}</span>
+                    ):(!fut&&<span style={{fontSize:14,color:"#121d2b",lineHeight:1}}>·</span>)}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 18px",background:"#06090f",borderTop:"1px solid #161f2e"}}>
+          <span style={{fontSize:9,color:"#304a60",letterSpacing:2}}>MONTHLY TOTAL</span>
+          <span style={{fontSize:22,fontWeight:700,color:fMo?mt>=0?G:R:"#304a60",textShadow:fMo?glow(mt):"none"}}>{fMo?fMo.text:"—"}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── YEAR VIEW ──
+  function YearView(){
+    const yt=Array.from({length:12},(_,m)=>mTotal(yr,m)).reduce((a,b)=>a+b,0);
+    const fY=fmt(yt);
+    return(
+      <div style={{padding:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+          {Array.from({length:12},(_,m)=>{
+            const mt=mTotal(yr,m);const fm=fmt(mt);
+            const d=dim(yr,m);const fday=fd(yr,m);const cur=m===mo;
+            return(
+              <div key={m} onClick={()=>{setMo(m);setCalMode("month");}} style={{
+                background:"#0b1420",border:`1px solid ${cur?"#3b82f6":"#161f2e"}`,
+                borderRadius:6,padding:"12px 10px",cursor:"pointer"
+              }}>
+                <div style={{fontSize:9,letterSpacing:2,color:"#304a60",marginBottom:7}}>{MS[m]}</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:7}}>
+                  {Array(fday).fill(null).map((_,i)=><div key={i} style={{height:5}}/>)}
+                  {Array.from({length:d},(_,i)=>{const pl=get(yr,m,i+1);return<div key={i} style={{height:5,borderRadius:1,background:pl===null?"#161f2e":pl>=0?"#14532d":"#7f1d1d"}}/>;})}</div>
+                <div style={{fontSize:15,fontWeight:700,color:fm?fm.value>=0?G:R:"#304a60"}}>{fm?fm.text:"—"}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 2px",borderTop:"1px solid #161f2e"}}>
+          <span style={{fontSize:9,color:"#304a60",letterSpacing:2}}>YEAR TOTAL {yr}</span>
+          <span style={{fontSize:22,fontWeight:700,color:fY?fY.value>=0?G:R:"#304a60",textShadow:fY?glow(yt):"none"}}>{fY?fY.text:"—"}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DASHBOARD ──
+  function Dashboard(){
+    const n=new Date();
+    let entries=[];
+    if(dashRange==="week"){
+      const dow=n.getDay()===0?6:n.getDay()-1;
+      for(let i=0;i<=dow;i++){const d=new Date(n);d.setDate(n.getDate()-dow+i);entries.push({date:new Date(d),v:get(d.getFullYear(),d.getMonth(),d.getDate())});}
+    }else if(dashRange==="month"){
+      for(let d=1;d<=n.getDate();d++)entries.push({date:new Date(n.getFullYear(),n.getMonth(),d),v:get(n.getFullYear(),n.getMonth(),d)});
+    }else if(dashRange==="quarter"){
+      const qs=new Date(n.getFullYear(),Math.floor(n.getMonth()/3)*3,1);
+      for(let d=new Date(qs);d<=n;d.setDate(d.getDate()+1))entries.push({date:new Date(d),v:get(d.getFullYear(),d.getMonth(),d.getDate())});
+    }else if(dashRange==="semester"){
+      const ss=new Date(n.getFullYear(),n.getMonth()<6?0:6,1);
+      for(let d=new Date(ss);d<=n;d.setDate(d.getDate()+1))entries.push({date:new Date(d),v:get(d.getFullYear(),d.getMonth(),d.getDate())});
+    }else{
+      for(let m=0;m<=n.getMonth();m++){
+        const ds=m<n.getMonth()?dim(n.getFullYear(),m):n.getDate();
+        for(let d=1;d<=ds;d++)entries.push({date:new Date(n.getFullYear(),m,d),v:get(n.getFullYear(),m,d)});
+      }
+    }
+    const wd=entries.filter(e=>e.v!==null);
+    const total=wd.reduce((s,e)=>s+e.v,0);
+    const wins=wd.filter(e=>e.v>0),losses=wd.filter(e=>e.v<0);
+    const wr=wd.length>0?(wins.length/wd.length*100).toFixed(0):0;
+    const avgW=wins.length>0?wins.reduce((s,e)=>s+e.v,0)/wins.length:0;
+    const avgL=losses.length>0?losses.reduce((s,e)=>s+e.v,0)/losses.length:0;
+    const best=wd.length>0?Math.max(...wd.map(e=>e.v)):0;
+    const worst=wd.length>0?Math.min(...wd.map(e=>e.v)):0;
+    const gW=wins.reduce((s,e)=>s+e.v,0),gL=Math.abs(losses.reduce((s,e)=>s+e.v,0));
+    const pf=gL>0?(gW/gL).toFixed(2):wins.length>0?"∞":"—";
+
+    const mMap={};
+    wd.forEach(e=>{const mk=`${e.date.getFullYear()}-${e.date.getMonth()}`;if(!mMap[mk])mMap[mk]={m:e.date.getMonth(),t:0};mMap[mk].t+=e.v;});
+    const mData=Object.values(mMap);
+    const wMap={};
+    wd.forEach(e=>{const wk=`${e.date.getFullYear()}-W${wkn(e.date)}`;if(!wMap[wk])wMap[wk]={t:0};wMap[wk].t+=e.v;});
+    const wData=Object.values(wMap);
+
+    const barData=(dashRange==="year"||dashRange==="semester"||dashRange==="quarter")
+      ?mData.map(m=>({label:MS[m.m],v:m.t}))
+      :dashRange==="month"?wData.map((w,i)=>({label:`W${i+1}`,v:w.t}))
+      :entries.filter(e=>e.v!==null).map(e=>({label:e.date.getDate().toString(),v:e.v}));
+    const barMax=Math.max(...barData.map(b=>Math.abs(b.v)),1);
+
+    let cum=0;
+    const cumPts=entries.map(e=>{cum+=e.v??0;return cum;});
+    const minC=Math.min(...cumPts,0),maxC=Math.max(...cumPts,0),range=maxC-minC||1;
+    const W=500,H=65;
+    const px=i=>(i/(cumPts.length-1||1))*W;
+    const py=v=>H-((v-minC)/range)*H;
+    const lineD=cumPts.map((v,i)=>`${i===0?"M":"L"} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).join(" ");
+    const fillD=lineD+` L ${px(cumPts.length-1).toFixed(1)} ${H} L 0 ${H} Z`;
+    const lastCum=cumPts[cumPts.length-1]??0;
+    const lc=lastCum>=0?G:R;
+    const fTotal=fmt(total,false);
+    const rl={week:"THIS WEEK",month:"THIS MONTH",quarter:"THIS QUARTER",semester:"THIS SEMESTER",year:"THIS YEAR"};
+
+    const Card=({label,val,color,sub})=>(
+      <div style={{background:"#0b1420",border:"1px solid #161f2e",borderRadius:6,padding:"12px 14px"}}>
+        <div style={{fontSize:8,color:"#304a60",letterSpacing:2,marginBottom:6}}>{label}</div>
+        <div style={{fontSize:17,fontWeight:700,color:color||"#c0d0e0"}}>{val}</div>
+        {sub&&<div style={{fontSize:9,color:"#1c2a3a",marginTop:3}}>{sub}</div>}
+      </div>
+    );
+
+    return(
+      <div style={{padding:14,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>
+          {["week","month","quarter","semester","year"].map(r=>(
+            <button key={r} onClick={()=>setDashRange(r)} style={{
+              padding:"7px 2px",fontSize:8,letterSpacing:1,fontFamily:"'Courier New',monospace",
+              background:dashRange===r?"#112035":"transparent",
+              color:dashRange===r?"#60a5fa":"#2a3d50",
+              border:`1px solid ${dashRange===r?"#3b82f6":"#161f2e"}`,borderRadius:4
+            }}>{r.toUpperCase()}</button>
+          ))}
+        </div>
+
+        <div style={{background:"#0b1420",border:`1px solid ${total>=0?"#14532d":"#7f1d1d"}`,borderRadius:8,padding:"18px 20px"}}>
+          <div style={{fontSize:9,color:"#304a60",letterSpacing:2,marginBottom:7}}>{rl[dashRange]}</div>
+          <div style={{fontSize:36,fontWeight:700,color:total>=0?G:R,textShadow:glow(total),letterSpacing:-1}}>{fTotal?fTotal.text:"$0.00"}</div>
+          <div style={{fontSize:10,color:"#1c2a3a",marginTop:5,letterSpacing:1}}>{wd.length} days · {wins.length}W / {losses.length}L</div>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+          <Card label="WIN RATE" val={`${wr}%`} color={wr>=50?G:R}/>
+          <Card label="PROFIT FACTOR" val={pf} color="#60a5fa"/>
+          <Card label="BEST DAY" val={fmt(best)?.text??"—"} color={G}/>
+          <Card label="AVG WIN" val={fmt(avgW)?.text??"—"} color={G} sub={`${wins.length} days`}/>
+          <Card label="AVG LOSS" val={fmt(avgL)?.text??"—"} color={R} sub={`${losses.length} days`}/>
+          <Card label="WORST DAY" val={fmt(worst)?.text??"—"} color={R}/>
+        </div>
+
+        {barData.length>0&&(
+          <div style={{background:"#0b1420",border:"1px solid #161f2e",borderRadius:6,padding:"13px 14px"}}>
+            <div style={{fontSize:8,color:"#304a60",letterSpacing:2,marginBottom:12}}>
+              {dashRange==="week"?"DAILY":dashRange==="month"?"WEEKLY":"MONTHLY"} BREAKDOWN
+            </div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:5,height:90}}>
+              {barData.map((b,i)=>{
+                const pct=Math.abs(b.v)/barMax;const h=Math.max(pct*74,b.v!==0?3:1);
+                return(
+                  <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,height:"100%",justifyContent:"flex-end"}}>
+                    <div style={{fontSize:7,color:b.v>=0?G:R,fontWeight:700,textAlign:"center"}}>{fmt(b.v)?.text??""}</div>
+                    <div style={{width:"75%",height:`${h}px`,background:b.v>=0?"linear-gradient(to top,#14532d,#4ade80)":"linear-gradient(to top,#7f1d1d,#f87171)",borderRadius:"2px 2px 0 0"}}/>
+                    <div style={{fontSize:7,color:"#1c2a3a"}}>{b.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {cumPts.length>1&&(
+          <div style={{background:"#0b1420",border:"1px solid #161f2e",borderRadius:6,padding:"13px 14px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <span style={{fontSize:8,color:"#304a60",letterSpacing:2}}>CUMULATIVE P&L</span>
+              <span style={{fontSize:12,fontWeight:700,color:lc}}>{fmt(lastCum,false)?.text??"—"}</span>
+            </div>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:65,overflow:"visible"}}>
+              <defs>
+                <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lc} stopOpacity="0.2"/>
+                  <stop offset="100%" stopColor={lc} stopOpacity="0.01"/>
+                </linearGradient>
+              </defs>
+              <path d={fillD} fill="url(#g)"/>
+              <path d={lineD} fill="none" stroke={lc} strokeWidth="1.5" style={{filter:`drop-shadow(0 0 3px ${lc})`}}/>
+              {minC<0&&maxC>0&&<line x1="0" y1={py(0).toFixed(1)} x2={W} y2={py(0).toFixed(1)} stroke="#161f2e" strokeWidth="1" strokeDasharray="4,3"/>}
+            </svg>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const NB={background:"transparent",border:"1px solid #161f2e",color:"#304a60",borderRadius:4,padding:"4px 10px",fontSize:14};
+
+  return(
+    <div style={{minHeight:"100vh",background:"#04070e",display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 8px"}}>
+      <div style={{width:"100%",maxWidth:760,background:"#080d18",border:"1px solid #161f2e",borderRadius:10,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.85)"}}>
+
+        {/* Header row 1 */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #0e1520",background:"#06090f"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:14,fontWeight:700,color:"#c0d0e0",letterSpacing:1}}>P&L</span>
+            <span style={{fontSize:14,color:"#161f2e",letterSpacing:1}}>JOURNAL</span>
+          </div>
+          <div style={{display:"flex",gap:4}}>
+            {["calendar","dashboard"].map(v=>(
+              <button key={v} onClick={()=>setView(v)} style={{
+                background:view===v?"#112035":"transparent",
+                border:`1px solid ${view===v?"#3b82f6":"#161f2e"}`,
+                color:view===v?"#60a5fa":"#2a3d50",
+                borderRadius:5,padding:"6px 14px",fontSize:10,letterSpacing:1,fontWeight:700,fontFamily:"'Courier New',monospace"
+              }}>{v==="calendar"?"CALENDAR":"DASHBOARD"}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Header row 2 — calendar nav */}
+        {view==="calendar"&&(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px",borderBottom:"1px solid #161f2e",background:"#06090f"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <button onClick={calMode==="month"?prevMo:()=>setYr(y=>y-1)} style={NB}>‹</button>
+              <span style={{fontSize:12,color:"#4a6070",minWidth:calMode==="month"?120:50,textAlign:"center",letterSpacing:1}}>
+                {calMode==="month"?`${MONTHS[mo].toUpperCase()} ${yr}`:yr}
+              </span>
+              <button onClick={calMode==="month"?nextMo:()=>setYr(y=>y+1)} style={NB}>›</button>
+            </div>
+            <div style={{display:"flex",gap:5}}>
+              {["month","year"].map(cm=>(
+                <button key={cm} onClick={()=>setCalMode(cm)} style={{
+                  background:calMode===cm?"#112035":"transparent",
+                  border:`1px solid ${calMode===cm?"#3b82f6":"#161f2e"}`,
+                  color:calMode===cm?"#60a5fa":"#2a3d50",
+                  borderRadius:4,padding:"4px 10px",fontSize:9,letterSpacing:1,fontFamily:"'Courier New',monospace"
+                }}>{cm.toUpperCase()}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {view==="calendar"&&calMode==="month"&&<MonthView/>}
+        {view==="calendar"&&calMode==="year"&&<YearView/>}
+        {view==="dashboard"&&<Dashboard/>}
+      </div>
+
+      <div style={{marginTop:10,fontSize:8,color:"#0a1020",letterSpacing:2}}>NQ · CME · AMP · 225356</div>
+
+      {/* Edit modal */}
+      {edit&&(
+        <div onClick={()=>confirmEdit()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#080d18",border:"1px solid #3b82f6",borderRadius:10,padding:"24px 28px",width:280,display:"flex",flexDirection:"column",gap:14,boxShadow:"0 0 50px rgba(59,130,246,0.2)"}}>
+            <div style={{fontSize:9,color:"#4a6070",letterSpacing:2}}>{MONTHS[edit.m].toUpperCase()} {edit.d}, {edit.y}</div>
+            <div style={{fontSize:9,color:"#5a7090",letterSpacing:1}}>DAILY P&L (USD)</div>
+            <input autoFocus value={inp} onChange={e=>setInp(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")confirmEdit();if(e.key==="Escape"){setEdit(null);setInp("");}}}
+              placeholder="715 or -350" inputMode="decimal"
+              style={{background:"#04070e",border:"1px solid #2a3d50",borderRadius:6,padding:"12px 14px",color:"#ddeeff",fontSize:20,fontWeight:700,fontFamily:"'Courier New',monospace",outline:"none",textAlign:"center",width:"100%"}}
+            />
+            {inp.trim()&&!isNaN(parseFloat(inp))&&(()=>{
+              const v=parseFloat(inp),f=fmt(v,false);
+              return f?<div style={{textAlign:"center",fontSize:28,fontWeight:700,color:v>=0?G:R,textShadow:glow(v)}}>{f.text}</div>:null;
+            })()}
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>confirmEdit()} style={{flex:1,padding:"11px 0",background:"#112035",border:"1px solid #3b82f6",color:"#60a5fa",borderRadius:6,fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:1,fontWeight:700}}>SAVE</button>
+              <button onClick={()=>confirmEdit(true)} style={{padding:"11px 14px",background:"transparent",border:"1px solid #161f2e",color:"#2a3d50",borderRadius:6,fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:1}}>CLEAR</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+</body>
+</html>
