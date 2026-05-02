@@ -15,6 +15,48 @@
     ::-webkit-scrollbar{display:none;}
     button{font-family:'Courier New',monospace;cursor:pointer;border:none;background:none;}
     input{font-family:'Courier New',monospace;}
+    .day-cell{
+      position:relative;
+      background:#0e1625;
+      border-right:1px solid #0c1118;
+      border-bottom:1px solid #0c1118;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:space-between;
+      padding:6px 2px 7px;
+      cursor:pointer;
+      transition:filter 0.1s;
+      /* Fixed height using padding-bottom trick for square cells */
+      width:100%;
+      height:0;
+      padding-bottom:calc(100% - 0px);
+      overflow:hidden;
+    }
+    .day-cell-inner{
+      position:absolute;
+      top:0;left:0;right:0;bottom:0;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:space-between;
+      padding:6px 2px 8px;
+    }
+    .day-cell:active{filter:brightness(1.3);}
+    .day-empty{
+      background:#06090f;
+      border-right:1px solid #0c1118;
+      width:100%;
+      height:0;
+      padding-bottom:100%;
+    }
+    .wk-empty{
+      background:#06090f;
+      border-right:1px solid #161f2e;
+      width:100%;
+      height:0;
+      padding-bottom:100%;
+    }
   </style>
 </head>
 <body>
@@ -115,6 +157,7 @@ function App(){
 
     return (
       <div>
+        {/* Weekday header */}
         <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",background:"#06090f",borderBottom:"1px solid #161f2e"}}>
           <div style={{padding:"9px 0",fontSize:8,color:"#1a2535",textAlign:"center"}}>WK</div>
           {WD.map(w=>(
@@ -122,37 +165,65 @@ function App(){
           ))}
         </div>
 
+        {/* Rows */}
         {rows.map((row,ri)=>{
           let wt=0,hasW=false;
           row.forEach(d=>{if(!d)return;const v=get(yr,mo,d);if(v!==null){wt+=v;hasW=true;}});
           const fW=fmt(wt);
           const padded=row.length<7?[...row,...Array(7-row.length).fill(null)]:row;
+
           return(
-            <div key={ri} style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",borderBottom:"1px solid #0c1118"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",background:"#06090f",borderRight:"1px solid #161f2e",padding:"2px"}}>
-                {hasW&&fW&&<span style={{fontSize:9,fontWeight:700,textAlign:"center",lineHeight:1.3,color:wt>=0?G:R,textShadow:glow(wt),wordBreak:"break-all"}}>{fW.text}</span>}
+            <div key={ri} style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)"}}>
+              {/* Week total column */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",background:"#06090f",borderRight:"1px solid #161f2e",borderBottom:"1px solid #0c1118",padding:"2px"}}>
+                {hasW&&fW&&(
+                  <span style={{fontSize:9,fontWeight:700,textAlign:"center",lineHeight:1.3,color:wt>=0?G:R,textShadow:glow(wt),wordBreak:"break-all"}}>{fW.text}</span>
+                )}
               </div>
+
+              {/* Day cells */}
               {padded.map((day,ci)=>{
-                if(!day)return<div key={ci} style={{aspectRatio:"1",background:"#06090f",borderRight:"1px solid #0c1118"}}/>;
+                if(!day) return(
+                  <div key={ci} style={{position:"relative",width:"100%",paddingBottom:"100%",background:ci>=5?"#060a10":"#06090f",borderRight:"1px solid #0c1118",borderBottom:"1px solid #0c1118"}}/>
+                );
                 const pl=get(yr,mo,day);
                 const fpl=fmt(pl);
                 const tod=isToday(yr,mo,day);
                 const fut=isFuture(yr,mo,day);
                 const wknd=ci>=5;
                 const bg=cellBg(pl)||(wknd?"#080c14":"#0e1625");
+
+                // font size based on value length
+                const plText=fpl?fpl.text:"";
+                const plSize=plText.length>7?9:plText.length>5?10:12;
+
                 return(
-                  <div key={day} onClick={()=>!fut&&openEdit(yr,mo,day)} style={{
-                    aspectRatio:"1",position:"relative",background:bg,
-                    borderRight:"1px solid #0c1118",cursor:fut?"default":"pointer",
-                    boxShadow:tod?"inset 0 0 0 2px #3b82f6":"none",
-                    transition:"filter 0.1s",display:"flex",flexDirection:"column",
-                    alignItems:"center",justifyContent:"space-between",
-                    padding:"8px 2px 9px"
-                  }}>
-                    <span style={{fontSize:12,fontWeight:tod?700:400,color:tod?"#60a5fa":wknd?"#1c2a3a":"#304a60",lineHeight:1}}>{day}</span>
-                    {fpl?(
-                      <span style={{fontSize:Math.abs(pl)>=10000?10:12,fontWeight:700,color:pl>=0?G:R,textShadow:glow(pl),lineHeight:1,textAlign:"center"}}>{fpl.text}</span>
-                    ):(!fut&&<span style={{fontSize:14,color:"#121d2b",lineHeight:1}}>·</span>)}
+                  <div key={day} onClick={()=>!fut&&openEdit(yr,mo,day)}
+                    style={{
+                      position:"relative",
+                      width:"100%",
+                      paddingBottom:"100%",
+                      background:bg,
+                      borderRight:"1px solid #0c1118",
+                      borderBottom:"1px solid #0c1118",
+                      boxShadow:tod?"inset 0 0 0 2px #3b82f6":"none",
+                      cursor:fut?"default":"pointer",
+                    }}
+                  >
+                    <div style={{
+                      position:"absolute",top:0,left:0,right:0,bottom:0,
+                      display:"flex",flexDirection:"column",
+                      alignItems:"center",justifyContent:"space-between",
+                      padding:"6px 2px 7px",
+                    }}>
+                      {/* Day number */}
+                      <span style={{fontSize:11,fontWeight:tod?700:400,color:tod?"#60a5fa":wknd?"#1c2a3a":"#304a60",lineHeight:1}}>{day}</span>
+
+                      {/* P&L value */}
+                      {fpl?(
+                        <span style={{fontSize:plSize,fontWeight:700,color:pl>=0?G:R,textShadow:glow(pl),lineHeight:1,textAlign:"center",letterSpacing:-0.3}}>{fpl.text}</span>
+                      ):(!fut&&<span style={{fontSize:14,color:"#121d2b",lineHeight:1}}>·</span>)}
+                    </div>
                   </div>
                 );
               })}
@@ -160,6 +231,7 @@ function App(){
           );
         })}
 
+        {/* Monthly total */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 18px",background:"#06090f",borderTop:"1px solid #161f2e"}}>
           <span style={{fontSize:9,color:"#304a60",letterSpacing:2}}>MONTHLY TOTAL</span>
           <span style={{fontSize:22,fontWeight:700,color:fMo?mt>=0?G:R:"#304a60",textShadow:fMo?glow(mt):"none"}}>{fMo?fMo.text:"—"}</span>
@@ -179,10 +251,7 @@ function App(){
             const mt=mTotal(yr,m);const fm=fmt(mt);
             const d=dim(yr,m);const fday=fd(yr,m);const cur=m===mo;
             return(
-              <div key={m} onClick={()=>{setMo(m);setCalMode("month");}} style={{
-                background:"#0b1420",border:`1px solid ${cur?"#3b82f6":"#161f2e"}`,
-                borderRadius:6,padding:"12px 10px",cursor:"pointer"
-              }}>
+              <div key={m} onClick={()=>{setMo(m);setCalMode("month");}} style={{background:"#0b1420",border:`1px solid ${cur?"#3b82f6":"#161f2e"}`,borderRadius:6,padding:"12px 10px",cursor:"pointer"}}>
                 <div style={{fontSize:9,letterSpacing:2,color:"#304a60",marginBottom:7}}>{MS[m]}</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:7}}>
                   {Array(fday).fill(null).map((_,i)=><div key={i} style={{height:5}}/>)}
@@ -227,8 +296,8 @@ function App(){
     const wr=wd.length>0?(wins.length/wd.length*100).toFixed(0):0;
     const avgW=wins.length>0?wins.reduce((s,e)=>s+e.v,0)/wins.length:0;
     const avgL=losses.length>0?losses.reduce((s,e)=>s+e.v,0)/losses.length:0;
-    const best=wd.length>0?Math.max(...wd.map(e=>e.v)):0;
-    const worst=wd.length>0?Math.min(...wd.map(e=>e.v)):0;
+    const best=wd.length>0?Math.max(...wd.map(e=>e.v)):null;
+    const worst=wd.length>0?Math.min(...wd.map(e=>e.v)):null;
     const gW=wins.reduce((s,e)=>s+e.v,0),gL=Math.abs(losses.reduce((s,e)=>s+e.v,0));
     const pf=gL>0?(gW/gL).toFixed(2):wins.length>0?"∞":"—";
 
@@ -270,12 +339,7 @@ function App(){
       <div style={{padding:14,display:"flex",flexDirection:"column",gap:12}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>
           {["week","month","quarter","semester","year"].map(r=>(
-            <button key={r} onClick={()=>setDashRange(r)} style={{
-              padding:"7px 2px",fontSize:8,letterSpacing:1,fontFamily:"'Courier New',monospace",
-              background:dashRange===r?"#112035":"transparent",
-              color:dashRange===r?"#60a5fa":"#2a3d50",
-              border:`1px solid ${dashRange===r?"#3b82f6":"#161f2e"}`,borderRadius:4
-            }}>{r.toUpperCase()}</button>
+            <button key={r} onClick={()=>setDashRange(r)} style={{padding:"7px 2px",fontSize:8,letterSpacing:1,fontFamily:"'Courier New',monospace",background:dashRange===r?"#112035":"transparent",color:dashRange===r?"#60a5fa":"#2a3d50",border:`1px solid ${dashRange===r?"#3b82f6":"#161f2e"}`,borderRadius:4}}>{r.toUpperCase()}</button>
           ))}
         </div>
 
@@ -288,17 +352,15 @@ function App(){
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
           <Card label="WIN RATE" val={`${wr}%`} color={wr>=50?G:R}/>
           <Card label="PROFIT FACTOR" val={pf} color="#60a5fa"/>
-          <Card label="BEST DAY" val={fmt(best)?.text??"—"} color={G}/>
-          <Card label="AVG WIN" val={fmt(avgW)?.text??"—"} color={G} sub={`${wins.length} days`}/>
+          <Card label="BEST DAY" val={best!==null?fmt(best)?.text??"—":"—"} color={best!==null&&best>=0?G:R}/>
+          <Card label="AVG WIN" val={wins.length>0?fmt(avgW)?.text??"—":"—"} color={G} sub={`${wins.length} days`}/>
           <Card label="AVG LOSS" val={losses.length>0?fmt(avgL)?.text??"—":"—"} color={R} sub={`${losses.length} days`}/>
-          <Card label="WORST DAY" val={fmt(worst)?.text??"—"} color={worst<0?R:"#c0d0e0"}/>
+          <Card label="WORST DAY" val={worst!==null?fmt(worst)?.text??"—":"—"} color={worst!==null&&worst<0?R:"#c0d0e0"}/>
         </div>
 
         {barData.length>0&&(
           <div style={{background:"#0b1420",border:"1px solid #161f2e",borderRadius:6,padding:"13px 14px"}}>
-            <div style={{fontSize:8,color:"#304a60",letterSpacing:2,marginBottom:12}}>
-              {dashRange==="week"?"DAILY":dashRange==="month"?"WEEKLY":"MONTHLY"} BREAKDOWN
-            </div>
+            <div style={{fontSize:8,color:"#304a60",letterSpacing:2,marginBottom:12}}>{dashRange==="week"?"DAILY":dashRange==="month"?"WEEKLY":"MONTHLY"} BREAKDOWN</div>
             <div style={{display:"flex",alignItems:"flex-end",gap:5,height:90}}>
               {barData.map((b,i)=>{
                 const pct=Math.abs(b.v)/barMax;const h=Math.max(pct*74,b.v!==0?3:1);
@@ -351,17 +413,12 @@ function App(){
           </div>
           <div style={{display:"flex",gap:4}}>
             {["calendar","dashboard"].map(v=>(
-              <button key={v} onClick={()=>setView(v)} style={{
-                background:view===v?"#112035":"transparent",
-                border:`1px solid ${view===v?"#3b82f6":"#161f2e"}`,
-                color:view===v?"#60a5fa":"#2a3d50",
-                borderRadius:5,padding:"6px 14px",fontSize:10,letterSpacing:1,fontWeight:700,fontFamily:"'Courier New',monospace"
-              }}>{v==="calendar"?"CALENDAR":"DASHBOARD"}</button>
+              <button key={v} onClick={()=>setView(v)} style={{background:view===v?"#112035":"transparent",border:`1px solid ${view===v?"#3b82f6":"#161f2e"}`,color:view===v?"#60a5fa":"#2a3d50",borderRadius:5,padding:"6px 14px",fontSize:10,letterSpacing:1,fontWeight:700,fontFamily:"'Courier New',monospace"}}>{v==="calendar"?"CALENDAR":"DASHBOARD"}</button>
             ))}
           </div>
         </div>
 
-        {/* Header row 2 — calendar nav */}
+        {/* Header row 2 */}
         {view==="calendar"&&(
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px",borderBottom:"1px solid #161f2e",background:"#06090f"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -373,12 +430,7 @@ function App(){
             </div>
             <div style={{display:"flex",gap:5}}>
               {["month","year"].map(cm=>(
-                <button key={cm} onClick={()=>setCalMode(cm)} style={{
-                  background:calMode===cm?"#112035":"transparent",
-                  border:`1px solid ${calMode===cm?"#3b82f6":"#161f2e"}`,
-                  color:calMode===cm?"#60a5fa":"#2a3d50",
-                  borderRadius:4,padding:"4px 10px",fontSize:9,letterSpacing:1,fontFamily:"'Courier New',monospace"
-                }}>{cm.toUpperCase()}</button>
+                <button key={cm} onClick={()=>setCalMode(cm)} style={{background:calMode===cm?"#112035":"transparent",border:`1px solid ${calMode===cm?"#3b82f6":"#161f2e"}`,color:calMode===cm?"#60a5fa":"#2a3d50",borderRadius:4,padding:"4px 10px",fontSize:9,letterSpacing:1,fontFamily:"'Courier New',monospace"}}>{cm.toUpperCase()}</button>
               ))}
             </div>
           </div>
@@ -397,11 +449,14 @@ function App(){
           <div onClick={e=>e.stopPropagation()} style={{background:"#080d18",border:"1px solid #3b82f6",borderRadius:10,padding:"24px 28px",width:280,display:"flex",flexDirection:"column",gap:14,boxShadow:"0 0 50px rgba(59,130,246,0.2)"}}>
             <div style={{fontSize:9,color:"#4a6070",letterSpacing:2}}>{MONTHS[edit.m].toUpperCase()} {edit.d}, {edit.y}</div>
             <div style={{fontSize:9,color:"#5a7090",letterSpacing:1}}>DAILY P&L (USD)</div>
-            <input autoFocus value={inp} onChange={e=>setInp(e.target.value)}
-  onKeyDown={e=>{if(e.key==="Enter")confirmEdit();if(e.key==="Escape"){setEdit(null);setInp("");}}}
-  placeholder="715 or -350"
-  style={{background:"#04070e",border:"1px solid #2a3d50",borderRadius:6,padding:"12px 14px",color:"#ddeeff",fontSize:20,fontWeight:700,fontFamily:"'Courier New',monospace",outline:"none",textAlign:"center",width:"100%"}}
-/>
+            <input
+              autoFocus
+              value={inp}
+              onChange={e=>setInp(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")confirmEdit();if(e.key==="Escape"){setEdit(null);setInp("");}}}
+              placeholder="715 or -350"
+              style={{background:"#04070e",border:"1px solid #2a3d50",borderRadius:6,padding:"12px 14px",color:"#ddeeff",fontSize:20,fontWeight:700,fontFamily:"'Courier New',monospace",outline:"none",textAlign:"center",width:"100%"}}
+            />
             {inp.trim()&&!isNaN(parseFloat(inp))&&(()=>{
               const v=parseFloat(inp),f=fmt(v,false);
               return f?<div style={{textAlign:"center",fontSize:28,fontWeight:700,color:v>=0?G:R,textShadow:glow(v)}}>{f.text}</div>:null;
